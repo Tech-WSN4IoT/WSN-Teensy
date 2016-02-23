@@ -1,1 +1,8 @@
-test
+This is a repository for GIT. `
+
+
+git remote add origin https://github.com/user_name/repository.git
+git push origin master
+git commit -m "message"
+
+git add "something"
