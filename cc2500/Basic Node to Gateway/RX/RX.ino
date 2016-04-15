@@ -9,7 +9,7 @@
 #define CC2500_FTX     0x3B      // Flush the TX FIFO buffer. Only issue SFTX in IDLE or TXFIFO_UNDERFLOW states
 #define CC2500_FRX     0x3A      // Flush the RX FIFO buffer. Only issue SFRX in IDLE or RXFIFO_OVERFLOW states
 #define CC2500_TXFIFO  0x3F
-#define CC2500_RXFIFO  0x3F
+#define CC2500_RXFIFO  0x3F 
 
 #define No_of_Bytes    3
 
@@ -18,7 +18,7 @@
 
 const int GDO0_PIN = 2;     // the number of the GDO0_PIN pin
 int GDO0_State = 0;         // variable for reading the pushbutton status
-int led = 13;
+int led = 5; 
 
 void setup()
 {
@@ -29,8 +29,8 @@ void setup()
   // initialize the pushbutton pin as an input:
   //pinMode(buttonPin, INPUT);     
   pinMode(GDO0_PIN, INPUT);     
-
-  Serial.println("Starting..");
+  delay(1000); 
+  Serial.println("Starting...");
   pinMode(led,OUTPUT);
   digitalWrite(led,HIGH); 
   init_CC2500();
@@ -54,6 +54,7 @@ void loop()
     
     Serial.println("BP = 1");
     */
+     
     RxData_RF();
   /*
     while (buttonState)
@@ -68,15 +69,17 @@ void loop()
 
 void RxData_RF(void) 
 {
-  
-  
+    SendStrobe(CC2500_IDLE);
+    // Flush RX FIFO
+    SendStrobe(CC2500_FRX);
     int PacketLength;
    // RX: enable RX
     SendStrobe(CC2500_RX);
-
+    
     GDO0_State = digitalRead(GDO0_PIN);
 //    Serial.println("GDO0");
 //    Serial.println(GDO0_State);
+    digitalWrite(led,LOW);
     
     // Wait for GDO0 to be set -> sync received
     while (!GDO0_State)
@@ -84,6 +87,8 @@ void RxData_RF(void)
         // read the state of the GDO0_PIN value:
         GDO0_State = digitalRead(GDO0_PIN);
         //Serial.println("GD0 = 0");
+        digitalWrite(led,HIGH); 
+        Serial.println(ReadReg(REG_RXBYTES),HEX);
         delay(100);
     }
     // Wait for GDO0 to be cleared -> end of packet
@@ -258,11 +263,11 @@ void Read_Config_Regs(void)
 { 
   Serial.println("Configuration registers");
   Serial.println(ReadReg(REG_IOCFG2),HEX);
-   delay(1000);
+   delay(10);
   Serial.println(ReadReg(REG_IOCFG1),HEX);
-   delay(1000);
+   delay(10);
   Serial.println(ReadReg(REG_IOCFG0),HEX);
-   delay(1000);
+   delay(10);
 /* Serial.println(ReadReg(REG_FIFOTHR),HEX);
    delay(1000);
   Serial.println(ReadReg(REG_SYNC1),HEX);

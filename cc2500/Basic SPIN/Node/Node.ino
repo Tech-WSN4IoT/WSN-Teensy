@@ -51,16 +51,13 @@
 
 #define No_of_Bytes    3
 
-const int buttonPin = 2;     // the number of the pushbutton pin
-int buttonState = 0;         // variable for reading the pushbutton status
-
-const int GDO0_PIN = 4;     // the number of the GDO0_PIN pin
+const int GDO0_PIN = 2;     // the number of the GDO0_PIN pin
 int GDO0_State = 0;         // variable for reading the pushbutton status
 
 unsigned char data_buffer[100]; // Node's unique buffer filled with data
 unsigned char packet[No_of_Bytes];   //Node's unique information packet
 
-boolean testNode;           //True if we want to transmit the data
+boolean testNode = 1;           //True if we want to transmit the data
 char nodeID = 0x05;         //ID of node
 
 void setup()
@@ -73,7 +70,7 @@ void setup()
   pinMode(buttonPin, INPUT);     
   pinMode(GDO0_PIN, INPUT);     
 
-  Serial.println("Starting..");
+  Serial.println("Starting SPIN node");
   init_CC2500();
 
   /* This function is to make sure that cc2500 is successfully configured.
@@ -88,8 +85,6 @@ void setup()
   packet[0] = No_of_Bytes;
   packet[1] = nodeID;
   packet[2] = 0x03;
-
-  testNode  = true; 
 }
 
 void loop()
@@ -251,15 +246,6 @@ void TxData_RF(void)
       SendStrobe(CC2500_IDLE);
       // Flush TX FIFO
       SendStrobe(CC2500_FTX);
-
-      // prepare Packet
-      /*
-      for(int i = 1; i < length; i++)
-      {	        	
-          packet[i] = i;
-      }
-      
-      */
       
       // SIDLE: exit RX/TX
       SendStrobe(CC2500_IDLE);

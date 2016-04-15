@@ -53,22 +53,17 @@
 //const int buttonPin = 2;     // the number of the pushbutton pin
 //int buttonState = 0;         // variable for reading the pushbutton status
 
-const int GDO0_PIN = 11;     // the number of the GDO0_PIN pin
+const int GDO0_PIN = 2;     // the number of the GDO0_PIN pin
 int GDO0_State = 0;         // variable for reading the GDO0 status
-int led = 13; 
-int tc_comm = 0; 
+int led = 5;  
+
+//SPISettings APA102(24000000, MSBFIRST, SPI_MODE1);
 
 void setup()
 {
   Serial.begin(9600);
-  pinMode(SS,OUTPUT);
+  pinMode(SS,OUTPUT); 
   SPI.begin();
-
-  // First reassign pin 13 to Alt1 so that it is not SCK but the LED still works
-  CORE_PIN13_CONFIG = PORT_PCR_MUX(1);
-  // and then reassign pin 14 to SCK
-  CORE_PIN14_CONFIG = PORT_PCR_DSE | PORT_PCR_MUX(2);
-  
   digitalWrite(SS,HIGH);
   // initialize the pushbutton pin as an input:
 //  pinMode(buttonPin, INPUT);     
@@ -78,6 +73,9 @@ void setup()
   pinMode(led,OUTPUT);
   digitalWrite(led,HIGH); 
   init_CC2500();
+
+//  pinMode(13,OUTPUT);
+//  digitalWrite(13,HIGH); 
   
   /* This function is to make sure that cc2500 is successfully configured.
    * This function read values of some registers from CC2500. 
@@ -100,17 +98,18 @@ void loop()
     }*/
 //    buttonState = digitalRead(buttonPin);
     //Serial.println(buttonState);
-    
+    digitalWrite(led,HIGH); 
 //  To start transmission
-    digitalWrite(led,HIGH);
+ //   digitalWrite(led,HIGH);
     // read the state of the pushbutton value:
     // buttonState = digitalRead(buttonPin);
     Serial.println("Transmission to start");
     delay(10);
     TxData_RF(No_of_Bytes);    //  Transmit No_of_Bytes-1
     Serial.println("Transmission is over");
+  //  digitalWrite(led,LOW); 
     digitalWrite(led,LOW); 
-    delay(10);      
+    delay(500);      
      /* 
     while (buttonState)
       {
@@ -133,8 +132,8 @@ void TxData_RF( unsigned char length)
       unsigned char packet[length];
       // First Byte = Length Of Packet
       packet[0] = length;
-      packet[1] = 0x09;
-      packet[2] = 0x01;
+      packet[1] = 0x04;
+      packet[2] = 0x05;
       /*
       for(int i = 1; i < length; i++)
       {	        	
