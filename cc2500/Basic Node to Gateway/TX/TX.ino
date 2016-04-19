@@ -104,12 +104,12 @@ void loop()
     // read the state of the pushbutton value:
     // buttonState = digitalRead(buttonPin);
     Serial.println("Transmission to start");
-    delay(10);
+    //delay(10);
     TxData_RF(No_of_Bytes);    //  Transmit No_of_Bytes-1
     Serial.println("Transmission is over");
   //  digitalWrite(led,LOW); 
     digitalWrite(led,LOW); 
-    delay(500);      
+    delay(1000);      
      /* 
     while (buttonState)
       {
@@ -126,7 +126,7 @@ void TxData_RF( unsigned char length)
       // Make sure that the radio is in IDLE state before flushing the FIFO
       SendStrobe(CC2500_IDLE);
       // Flush TX FIFO
-      SendStrobe(CC2500_FTX);
+      //SendStrobe(CC2500_FTX);
 
       // prepare Packet
       unsigned char packet[length];
@@ -143,7 +143,7 @@ void TxData_RF( unsigned char length)
       */
       
       // SIDLE: exit RX/TX
-      SendStrobe(CC2500_IDLE);
+      //SendStrobe(CC2500_IDLE);
       
       for(int i = 0; i < length; i++)
       {	  

@@ -18,7 +18,7 @@
 
 const int GDO0_PIN = 2;     // the number of the GDO0_PIN pin
 int GDO0_State = 0;         // variable for reading the pushbutton status
-int led = 5; 
+const int led = 5; 
 
 void setup()
 {
@@ -34,36 +34,16 @@ void setup()
   pinMode(led,OUTPUT);
   digitalWrite(led,HIGH); 
   init_CC2500();
+//  WriteReg("MDMCFG2.SYNC_MODE","110"); 
+
+  
   Read_Config_Regs();
 }
 
 void loop()
 {
   //Read_Config_Regs();
-  /*
-//  To start transmission
-    buttonState = digitalRead(buttonPin);
-    Serial.println(buttonState);
-
-    while (!buttonState)
-    {
-        // read the state of the pushbutton value:
-        buttonState = digitalRead(buttonPin);
-        Serial.println("PB = 0");
-    }
-    
-    Serial.println("BP = 1");
-    */
-     
     RxData_RF();
-  /*
-    while (buttonState)
-    {
-        // read the state of the pushbutton value:
-        buttonState = digitalRead(buttonPin);
-        Serial.println("PB = 1");
-    }
-    */
 }
 
 
@@ -72,32 +52,64 @@ void RxData_RF(void)
     SendStrobe(CC2500_IDLE);
     // Flush RX FIFO
     SendStrobe(CC2500_FRX);
-    int PacketLength;
    // RX: enable RX
     SendStrobe(CC2500_RX);
     
+    int PacketLength;
     GDO0_State = digitalRead(GDO0_PIN);
-//    Serial.println("GDO0");
-//    Serial.println(GDO0_State);
     digitalWrite(led,LOW);
-    
+
+    int iterationLimit = 50; 
+    int intCt = 0; 
     // Wait for GDO0 to be set -> sync received
-    while (!GDO0_State)
-    {
-        // read the state of the GDO0_PIN value:
-        GDO0_State = digitalRead(GDO0_PIN);
+    char outF; 
+    digitalWrite(led,HIGH); 
+    while (!GDO0_State) {
         //Serial.println("GD0 = 0");
-        digitalWrite(led,HIGH); 
-        Serial.println(ReadReg(REG_RXBYTES),HEX);
-        delay(100);
+        //Serial.println(ReadReg(CC2500_RXFIFO),HEX); 
+        delay(10); 
+        /*
+         * 
+        outF = ReadReg(CC2500_RXFIFO);
+        if(outF==0x03){
+          if(ReadReg(CC2500_RXFIFO)==0x04){
+            if(ReadReg(CC2500_RXFIFO)==0x05){
+              Serial.println("YO");
+            }
+          }
+        }
+        SendStrobe(CC2500_IDLE); 
+        SendStrobe(CC2500_FRX); 
+        SendStrobe(CC2500_RX); 
+        */
+
+        
+        /*
+        intCt++; 
+        if(intCt>iterationLimit){
+          
+          SendStrobe(CC2500_IDLE);
+          // Flush RX FIFO
+          //Serial.println("Dumping RXB"); 
+          delay(10); 
+          SendStrobe(CC2500_FRX);
+          delay(10); 
+         // RX: enable RX
+          SendStrobe(CC2500_RX);
+          delay(10); 
+          //Serial.println(ReadReg(REG_RXBYTES),HEX);          
+          intCt = 0; 
+        }*/
+        GDO0_State = digitalRead(GDO0_PIN); // read the state of the GDO0_PIN value
     }
     // Wait for GDO0 to be cleared -> end of packet
+    digitalWrite(led,LOW); 
     while (GDO0_State)
     {
       // read the state of the GDO0_PIN value:
       GDO0_State = digitalRead(GDO0_PIN);
         //Serial.println("GD0 = 1");
-        delay(100);
+      delay(100);
     }
     
     /*
@@ -112,21 +124,25 @@ void RxData_RF(void)
   // Read length byte
         PacketLength = ReadReg(CC2500_RXFIFO);
         
-        Serial.println("---------------------");
-          Serial.println(PacketLength,HEX);
-          Serial.println(" Packet Received ");
+
           
         if(No_of_Bytes == PacketLength)
         {
-          
-          
+          Serial.println("---------------------");
+          Serial.println(PacketLength,HEX);
+          Serial.println(" Packet Received ");
+          data1 = ReadReg(CC2500_RXFIFO); 
+          Serial.println(int(data1)); 
+          //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
+          //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
+          Serial.println(" Degrees Celcius");           
           // Read data from RX FIFO and store in rxBuffer
           
           //for(int i = 1; i < PacketLength; i++)
-          //{            
+ /*         //{            
             data1 = ReadReg(CC2500_RXFIFO);
             Serial.println(data1,HEX);
-            if(data1 = 0x09){
+            if(data1 == 0x09){
                 data2 = ReadReg(CC2500_RXFIFO);
                 Serial.println(data2,HEX);
                 if(data2 == 0x01 ){
@@ -137,7 +153,7 @@ void RxData_RF(void)
                 }
             }
             //Serial.println(ReadReg(CC2500_RXFIFO), HEX);
-          //}
+    */      //}
           Serial.println("---------------------");
         }
          
