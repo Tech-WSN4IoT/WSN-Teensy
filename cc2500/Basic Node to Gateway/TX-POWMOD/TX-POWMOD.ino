@@ -1,8 +1,32 @@
+/*
+* Transmitter file is designed to transmit a packet of 3 bytes.
+* -------------------------------------------------------------
+* The Packet which is to be sent is hard-coded.
+*
+* Pattern for the Packet is: 
+* 1st Byte = Length of Packet
+* 2nd Byte = Your Data
+* 3rd Byte = More Data
+* .
+* .
+* Nth Byte = Last Byte of Data
+*
+* -------------------------------------------------------------
+*
+* Hard-coded Packet for this sample program is:
+* 1st Byte = 3;    // Length of Packet
+* 2nd Byte = 0x09;
+* 3rd Byte = 0x01;
+*
+* Receiver will get the Packet in the above Pattern.
+*
+*
+*/
+
 #include <cc2500_REG.h>
 #include <cc2500_VAL.h>
 
 #include <SPI.h>
-#include <stdlib.h>
 
 #define CC2500_IDLE    0x36      // Exit RX / TX, turn
 #define CC2500_TX      0x35      // Enable TX. If in RX state, only enable TX if CCA passes
@@ -10,169 +34,128 @@
 #define CC2500_FTX     0x3B      // Flush the TX FIFO buffer. Only issue SFTX in IDLE or TXFIFO_UNDERFLOW states
 #define CC2500_FRX     0x3A      // Flush the RX FIFO buffer. Only issue SFRX in IDLE or RXFIFO_OVERFLOW states
 #define CC2500_TXFIFO  0x3F
-#define CC2500_RXFIFO  0x3F 
-#define CC2500_RSSI    0x34      // Received Signal Strength Indicator 
+#define CC2500_RXFIFO  
+
 
 #define No_of_Bytes    3
 
-//const int buttonPin = 2;     // the number of the pushbutton pin
-//int buttonState = 0;         // variable for reading the pushbutton status
+const int GDO0_PIN = 16;     // the number of the GDO0_PIN pin
+int GDO0_State = 0;         // variable for reading the GDO0 status
+int led = 5;  
 
-//const int GDO0_PIN = 16;     // the number of the GDO0_PIN pin
-const int GDO0_PIN = 2; 
-int GDO0_State = 0;         // variable for reading the pushbutton status
-const int led = 5; 
+//SPISettings APA102(24000000, MSBFIRST, SPI_MODE1);
 
 void setup()
 {
   Serial.begin(9600);
-  pinMode(SS,OUTPUT);
+  pinMode(SS,OUTPUT); 
   SPI.begin();
   digitalWrite(SS,HIGH);
   // initialize the pushbutton pin as an input:
-  //pinMode(buttonPin, INPUT);     
+//  pinMode(buttonPin, INPUT);     
   pinMode(GDO0_PIN, INPUT);     
-  delay(500); 
-  Serial.println("Starting...");
+  
+  Serial.println("Starting..");
   pinMode(led,OUTPUT);
   digitalWrite(led,HIGH); 
   init_CC2500();
-//  WriteReg("MDMCFG2.SYNC_MODE","110"); 
 
+//  pinMode(13,OUTPUT);
+//  digitalWrite(13,HIGH); 
   
+  /* This function is to make sure that cc2500 is successfully configured.
+   * This function read values of some registers from CC2500. 
+   * To use this function, you must read the register values from 
+   * -> Arduino-CC2500-Library / CC2500_Library / cc2500_VAL.h
+   * Then compare the values from result of this function..
+   */
   Read_Config_Regs();
 }
 
 void loop()
 {
-  //Read_Config_Regs();
-    RxData_RF();
-    Serial.println("Receive Strength:"); 
-    //char rssi = ReadReg(CC2500_RSSI); 
-    //char * pEnd;
- //   long inPow = strtol(rssi,&pEnd,6); 
- //   Serial.println(inPow); 
+/*    
+    tc_comm = digitalRead(GDO0_PIN);
+    if(tc_comm == false){
+      digitalWrite(led,LOW);
+    }
+    else{
+      digitalWrite(led,HIGH); 
+    }*/
+//    buttonState = digitalRead(buttonPin);
+    //Serial.println(buttonState);
+    digitalWrite(led,HIGH); 
+//  To start transmission
+ //   digitalWrite(led,HIGH);
+    // read the state of the pushbutton value:
+    // buttonState = digitalRead(buttonPin);
+    Serial.println("Transmission to start");
+    //delay(10);
+    TxData_RF(No_of_Bytes);    //  Transmit No_of_Bytes-1
+    Serial.println("Transmission is over");
+  //  digitalWrite(led,LOW); 
+    digitalWrite(led,LOW); 
+    delay(100);      
+     /* 
+    while (buttonState)
+      {
+      // read the state of the pushbutton value:
+      buttonState = digitalRead(buttonPin);
+      Serial.println("PB = 1");
+      }
+      */
 }
 
-
-void RxData_RF(void) 
+//  Send slide strobe
+void TxData_RF( unsigned char length)
 {
-    SendStrobe(CC2500_IDLE);
-    // Flush RX FIFO
-    SendStrobe(CC2500_FRX);
-   // RX: enable RX
-    SendStrobe(CC2500_RX);
-    
-    int PacketLength;
-    GDO0_State = digitalRead(GDO0_PIN);
-    digitalWrite(led,LOW);
+      // Make sure that the radio is in IDLE state before flushing the FIFO
+      SendStrobe(CC2500_IDLE);
+      // Flush TX FIFO
+      //SendStrobe(CC2500_FTX);
 
-    int iterationLimit = 50; 
-    int intCt = 0; 
-    // Wait for GDO0 to be set -> sync received
-    char outF; 
-    digitalWrite(led,HIGH); 
-    while (!GDO0_State) {
-        //Serial.println("GD0 = 0");//
-        //Serial.println(ReadReg(CC2500_RXFIFO),HEX); 
-        delay(10); 
-        /*
-         * 
-        outF = ReadReg(CC2500_RXFIFO);
-        if(outF==0x03){
-          if(ReadReg(CC2500_RXFIFO)==0x04){
-            if(ReadReg(CC2500_RXFIFO)==0x05){
-              Serial.println("YO");
-            }
-          }
-        }
-        SendStrobe(CC2500_IDLE); 
-        SendStrobe(CC2500_FRX); 
-        SendStrobe(CC2500_RX); 
-        */
-
-        
-        /*
-        intCt++; 
-        if(intCt>iterationLimit){
-          
-          SendStrobe(CC2500_IDLE);
-          // Flush RX FIFO
-          //Serial.println("Dumping RXB"); 
-          delay(10); 
-          SendStrobe(CC2500_FRX);
-          delay(10); 
-         // RX: enable RX
-          SendStrobe(CC2500_RX);
-          delay(10); 
-          //Serial.println(ReadReg(REG_RXBYTES),HEX);          
-          intCt = 0; 
-        }*/
-        GDO0_State = digitalRead(GDO0_PIN); // read the state of the GDO0_PIN value
-    }
-    // Wait for GDO0 to be cleared -> end of packet
-    digitalWrite(led,LOW); 
-    while (GDO0_State)
-    {
-      // read the state of the GDO0_PIN value:
-      GDO0_State = digitalRead(GDO0_PIN);
-        //Serial.println("GD0 = 1");
-      delay(100);
-    }
-    
-    /*
-    char rxbytes = ReadReg(0x3B);
-        Serial.println("---------------------");
-        Serial.println("RX Bytes: ");
-        Serial.println(rxbytes, HEX);
-        Serial.println("---------------------");
-    */
-    
-    char data1, data2;
-  // Read length byte
-        PacketLength = ReadReg(CC2500_RXFIFO);
-        
-
-          
-        if(No_of_Bytes == PacketLength)
-        {
-          Serial.println("---------------------");
-          Serial.println(PacketLength,HEX);
-          Serial.println(" Packet Received ");
-          data1 = ReadReg(CC2500_RXFIFO); 
-          Serial.println(int(data1)); 
-          //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
-          //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
-          Serial.println(" Degrees Celcius");           
-          // Read data from RX FIFO and store in rxBuffer
-          
-          //for(int i = 1; i < PacketLength; i++)
- /*         //{            
-            data1 = ReadReg(CC2500_RXFIFO);
-            Serial.println(data1,HEX);
-            if(data1 == 0x09){
-                data2 = ReadReg(CC2500_RXFIFO);
-                Serial.println(data2,HEX);
-                if(data2 == 0x01 ){
-                    //digitalWrite(led, LOW);
-                }
-                else{
-                    //digitalWrite(led, HIGH);
-                }
-            }
-            //Serial.println(ReadReg(CC2500_RXFIFO), HEX);
-    */      //}
-          Serial.println("---------------------");
-        }
-         
-        // Make sure that the radio is in IDLE state before flushing the FIFO
-        // (Unless RXOFF_MODE has been changed, the radio should be in IDLE state at this point) 
-        SendStrobe(CC2500_IDLE);
-        // Flush RX FIFO
-        SendStrobe(CC2500_FRX);
-
-}// Rf RxPacket
-
+      // prepare Packet
+      unsigned char packet[length];
+      // First Byte = Length Of Packet
+      packet[0] = length;
+      packet[1] = 0x04;
+      packet[2] = 0x05;
+      /*
+      for(int i = 1; i < length; i++)
+      {	        	
+          packet[i] = i;
+      }
+      
+      */
+      
+      // SIDLE: exit RX/TX
+      //SendStrobe(CC2500_IDLE);
+      
+      for(int i = 0; i < length; i++)
+      {	  
+          Serial.println("Transmitting ");
+          Serial.println(packet[i],HEX);
+          WriteReg(CC2500_TXFIFO,packet[i]);
+      }
+      // STX: enable TX
+      SendStrobe(CC2500_TX);
+      // Wait for GDO0 to be set -> sync transmitted
+      while (!GDO0_State)
+      {
+          // read the state of the GDO0_PIN value:
+          GDO0_State = digitalRead(GDO0_PIN);
+          //Serial.println("GDO0 = 0");
+       }
+       
+       // Wait for GDO0 to be cleared -> end of packet
+       while (GDO0_State)
+       {
+           // read the state of the GDO0_PIN value:
+           GDO0_State = digitalRead(GDO0_PIN);
+           //Serial.println("GDO0 = 1");
+       }
+}// Rf TX Packet 
+	
 
 void WriteReg(char addr, char value)
 {
@@ -285,7 +268,6 @@ void init_CC2500()
 
 void Read_Config_Regs(void)
 { 
-  Serial.println("Configuration registers");
   Serial.println(ReadReg(REG_IOCFG2),HEX);
    delay(10);
   Serial.println(ReadReg(REG_IOCFG1),HEX);
@@ -293,15 +275,15 @@ void Read_Config_Regs(void)
   Serial.println(ReadReg(REG_IOCFG0),HEX);
    delay(10);
 /* Serial.println(ReadReg(REG_FIFOTHR),HEX);
-   delay(1000);
+   delay(10);
   Serial.println(ReadReg(REG_SYNC1),HEX);
-   delay(1000);
+   delay(10);
   Serial.println(ReadReg(REG_SYNC0),HEX);
-   delay(1000);
+   delay(10);
   Serial.println(ReadReg(REG_PKTLEN),HEX);
-   delay(1000);
+   delay(10);
   Serial.println(ReadReg(REG_PKTCTRL1),HEX);
-   delay(1000);
+   delay(10);
   Serial.println(ReadReg(REG_PKTCTRL0),HEX);
    delay(10);
   Serial.println(ReadReg(REG_ADDR),HEX);

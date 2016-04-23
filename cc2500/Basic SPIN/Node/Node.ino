@@ -23,7 +23,7 @@
 unsigned char data_buffer[100]; // Node's unique buffer filled with data
 unsigned char packet[No_of_Bytes];   //Node's unique information packet
 
-char nodeID             = 0x05;        // ID of node
+char nodeID             = 0x05;        // ID of node 04-"Whiskey", 05-"Vodka", 06-"Lager", 07-"Cider"
 const int sensorPin     = 0;           // Pin of Temperature sensor 
 const int GDO0_PIN      = 2;           // the number of the GDO0_PIN pin
 int GDO0_State          = 0;           // variable for reading the pushbutton status

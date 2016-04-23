@@ -50,10 +50,7 @@
 
 #define No_of_Bytes    3
 
-//const int buttonPin = 2;     // the number of the pushbutton pin
-//int buttonState = 0;         // variable for reading the pushbutton status
-
-const int GDO0_PIN = 2;     // the number of the GDO0_PIN pin
+const int GDO0_PIN = 16;     // the number of the GDO0_PIN pin
 int GDO0_State = 0;         // variable for reading the GDO0 status
 int led = 5;  
 
@@ -109,7 +106,7 @@ void loop()
     Serial.println("Transmission is over");
   //  digitalWrite(led,LOW); 
     digitalWrite(led,LOW); 
-    delay(1000);      
+    delay(100);      
      /* 
     while (buttonState)
       {
