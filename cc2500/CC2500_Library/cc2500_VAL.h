@@ -21,6 +21,8 @@
 /* Channel number = 0 */
 /* PA table */
 #define PA_TABLE {0xfe,0x00,0x00,0x00,0x00,0x00,0x00,0x00,}
+// 0xFE = 0.2 dBm @ 19.5 mA,  0x43 = -25.6 dBm @ 10.0 mA 
+// 0xEE = 0.0 dBm @ 
 /***************************************************************
  *  SmartRF Studio(tm) Export
  *
