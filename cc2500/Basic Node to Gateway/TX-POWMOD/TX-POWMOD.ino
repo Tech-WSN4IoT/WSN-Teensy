@@ -34,7 +34,7 @@
 #define CC2500_FTX     0x3B      // Flush the TX FIFO buffer. Only issue SFTX in IDLE or TXFIFO_UNDERFLOW states
 #define CC2500_FRX     0x3A      // Flush the RX FIFO buffer. Only issue SFRX in IDLE or RXFIFO_OVERFLOW states
 #define CC2500_TXFIFO  0x3F
-#define CC2500_RXFIFO  
+//#define CC2500_RXFIFO  
 
 
 #define No_of_Bytes    3
@@ -200,7 +200,7 @@ void init_CC2500()
   WriteReg(REG_TEST2,VAL_TEST2);
   WriteReg(REG_TEST1,VAL_TEST1);
   WriteReg(REG_TEST0,VAL_TEST0);
-  WriteReg(0x3E,0xFF); 
+  WriteReg(0x3E,0x60); 
 /*  
   WriteReg(REG_PARTNUM,VAL_PARTNUM);
   WriteReg(REG_VERSION,VAL_VERSION);

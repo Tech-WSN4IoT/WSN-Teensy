@@ -30,18 +30,19 @@ int pktlen             = 4;     // Max Packet Length
 // [Length] [LN-ID of Origin Node] [MODE] [DATA]
 
 //------------------------NODE NAME--------------------------------------------
-int nodeID             = 4;      // ID of node 04-"Whiskey", 05-"Vodka", 06-"Lager", 07-"Cider"
+#define nodeID             0x05     // ID of node 04-"Whiskey", 05-"Vodka", 06-"Lager", 07-"Cider"
 //------------------------DATA SETUP-------------------------------------------
 boolean eventFlag       = false;
 // Reference State Machine Diagram on the Whiteboard in VL E361 As Of 4/23/16 1:00 AM 
-int S1TO                =  100;  // State 1 Iteration Time Out
-int S2TO                =  100;  // State 2 Iteration Time Out
-int S3TO                =  100;  // State 3 Iteration Time Out
-int S4TO                =  100;  // State 4 Iteration Time Out
+int S1TO                =  1000;  // State 1 Iteration Time Out
+int S2TO                =  1000;  // State 2 Iteration Time Out
+int S3TO                =  8000;  // State 3 Iteration Time Out
+int S4TO                =  1000;  // State 4 Iteration Time Out
 // There is an event 5 where it sees if there's any interesting data to flag as an event
 int limiter             =  0;  // General counter used in all state time-outs
 int state               =  1;  // Current state
 int TimeCycle           =  10; // Full Time Cycle of TX and RX in ms
+int delayEvent          =  5000; // Start event every [ ] miliseconds
 //-------------------------PIN SETUP-------------------------------------------
 const int sensorPin     = 14;          // Pin of Temperature sensor 
 const int GDO0_PIN      = 16;           // the number of the GDO0_PIN pin
@@ -50,10 +51,16 @@ const int LED           = 5;           // LED pin
 const int GATEOUT       = 0;           // Gate set read-out
 const int GATEIN        = 1;           // Gate state read-in
 boolean isGate          = false;       // Gate boolean 
+boolean breakFlag       = false;       // Flag when RX timers time out 
 //--------------------------END SETUP------------------------------------------
 
+double startTime; 
+double sinceTime; 
+
+Packet gPacket; //General use packet   
+Packet eventPacket; //General packet for node events 
+
 void setup(){
-  delay(2000); 
   Serial.begin(9600);
   pinMode(SS,OUTPUT);
   SPI.begin();
@@ -61,164 +68,183 @@ void setup(){
   pinMode(GDO0_PIN, INPUT);     
   pinMode(sensorPin, INPUT); 
   pinMode(LED,OUTPUT); 
+  blinkLED(); 
+  digitalWrite(LED,HIGH); 
   
   //--------------Determine if Gate
   pinMode(GATEOUT,OUTPUT); 
   pinMode(GATEIN,INPUT); 
   digitalWrite(GATEOUT,HIGH); 
-  if (digitalRead(GATEIN)==HIGH){
+  delay(1000);
+  if(digitalRead(GATEIN) == HIGH){
     isGate = true; 
-    Serial.println("Gate Activated - Listening for Data..."); 
+    Serial.print("Gate "); 
+    Serial.print(nodeID,HEX); 
+    Serial.println(" Activated - Listening for Data..."); 
+  }
+  else{
+    state = 5; 
   }
   //--------------
+  
+  startTime = getTimeSeconds();  
   
   //Read_Config_Regs(); //Initialize and check status of certain registers. Decomment if concenered 
 }
 
 void loop(){
-  Packet gPacket; //General use packet   
+  digitalWrite(LED,HIGH); 
   //STATE S1 - TX: n/a, RX: ADV ---------------------------------------------------------------o S1
-  state = 1; 
-  limiter = 0; 
-  while(!GDO0_State){
-     GDO0_State = digitalRead(GDO0_PIN); 
-     limiter++; 
-     if(limiter>S1TO){
-      state = 5;  
-      break;
-     }
-     delay(10); 
-  }
-  while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
-    GDO0_State = digitalRead(GDO0_PIN); 
-    delay(10); 
-  }
-  
-  gPacket = RX(); //updates the global variable pkt[4]; 
-  if(gPacket.type()==ADV){ 
-    //Listening for Advertisement
-    if(isInteresting(gPacket)){
-      state = 2; //Advance to next state knowing we heard a packet that's interesting
-    } 
-  }
-  else{
-    state = 1; //Heard a non-Advertisement, so keep at it. 
-  }
-  
-  //STATE S2 - TX: REQ, RX: DAT---------------------------------------------------------------o S2
-  if(state==2){
-    limiter = 0;  
-     
-    // INSERT CHECK MODE CODE 
-    gPacket.setType(REQ); 
-    TX(gPacket); //TX Req
 
-    while(!GDO0_State){
-     GDO0_State = digitalRead(GDO0_PIN); 
-     limiter++; 
-     if(limiter>S2TO){
-      state = 1;  
-      break;
-     }
-     delay(10); 
-    }
-    while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
-      GDO0_State = digitalRead(GDO0_PIN); 
-      delay(10); 
-    }
-    
-    gPacket = RX(); //updates the global variable pkt[4];  
-    if(gPacket.type()==DAT){
-      gPacket.setType(ACK); 
-      TX(gPacket); 
-      gPacket.setType(ADV); 
-      state = 3; 
+  if(state == 1){
+   //Serial.println("STATE 1");
+   
+    sinceTime = getTimeSeconds();  
+    if(!isGate && sinceTime > (startTime + delayEvent)){
+      startTime = sinceTime;
+      breakFlag = true;
+      state = 5; // go get an event 
     }
     else{
-      state = 2; //Try again
+      breakFlag = RX_packetWait(S1TO);
     }
-      
+    
+    if(!breakFlag){
+      gPacket = RX(); //updates the global variable pkt[4]; 
+      if(gPacket.type()==ADV){ 
+        //Listening for Advertisement
+        if(isInteresting(gPacket)){
+          state = 2; //Advance to next state knowing we heard a packet that's interesting
+        } 
+      }
+      else{
+        state = 1; //Heard a non-Advertisement, so keep at it. 
+      }
+    }
+  }
+  //STATE S2 - TX: REQ, RX: DAT---------------------------------------------------------------o S2
+  if(state==2){
+   // Serial.println("STATE 2"); 
+
+    gPacket.setType(REQ); 
+    gPacket.setLen(3); 
+    TX(gPacket); //TX Req
+    breakFlag = RX_packetWait(S2TO); 
+    if(!breakFlag){
+      eventPacket = RX(); //updates the global variable pkt[4];  
+      if(eventPacket.type()==DAT){
+        eventPacket.setType(ACK); 
+        TX(eventPacket); 
+        eventPacket.setType(ADV); 
+        state = 3; //Oh because now you have data you want to advertise 
+      }
+      else{
+        state = 1; //Try again
+      }
+    }
+    else{
+      state = 1;  
+    }
     }
    
   if(!isGate){ //States S3 and S4 are locked only to nodes. Gates only do states S1 and S2 and report all data through serial through puts. 
   //STATE S3 - TX: ADV, RX: REQ---------------------------------------------------------------o S3
   if(state==3){
-    limiter = 0; 
+  //Serial.println("STATE 3"); 
     
-    TX(gPacket); 
-
-    
-    while(!GDO0_State){
-     GDO0_State = digitalRead(GDO0_PIN); 
-     limiter++; 
-     if(limiter>S3TO){
-      state = 1;  
-      break;
-     }
-     delay(10); 
+    TX(eventPacket); 
+    breakFlag = RX_packetWait(S3TO); 
+    if(!breakFlag){
+      gPacket = RX(); 
+      if(gPacket.type()==REQ){
+        state = 4; 
+        gPacket.setType(DAT); 
+      }
+      else{
+        state = 1; 
+      }
     }
-    while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
-      GDO0_State = digitalRead(GDO0_PIN); 
-      delay(10); 
-    }
-
-    gPacket = RX(); 
-    if(gPacket.type()==REQ){
-      state = 4; 
-      gPacket.setType(DAT); 
-    }
-    else{
-      state = 1; 
-    }
-    
   }
   //STATE S4 - TX: DAT, RX: ACK---------------------------------------------------------------o S4
   if(state==4){
-    limiter = 0; 
-    TX(gPacket); 
-
-    while(!GDO0_State){
-     GDO0_State = digitalRead(GDO0_PIN); 
-     limiter++; 
-     if(limiter>S4TO){
-      state = 1;  
-      break;
-     }
-     delay(10); 
-    }
-    while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
-      GDO0_State = digitalRead(GDO0_PIN); 
-      delay(10); 
-    }
-
-    gPacket = RX(); 
-    if(gPacket.type()==ACK){
-      state = 1; 
-      gPacket.setType(DAT); 
-    }
-    else{
-      state = 4; //Retry sending Data
-    }
+    // Serial.println("STATE 4"); 
     
+    TX(eventPacket); 
+    blinkLED();
+    breakFlag = RX_packetWait(S4TO); 
+    if(!breakFlag){
+      gPacket = RX(); 
+      if(gPacket.type()==ACK){
+        state = 1;  
+      }
+      else{
+        state = 4; //Retry sending Data
+      }
+    }
     
   }
   //STATE S5 - EVENT--------------------------------------------------------------------------o S5
   if(state==5){
+     //Serial.println("STATE 5"); 
+     digitalWrite(LED,LOW); 
     int eventDat = readTemp(); 
     state = 3; //Let the world know you have something interesting to say.  
+    //gPacket(char(0x04),char(nodeID),char(ADV),char(eventDat)); 
+    eventPacket.setLen(Size_of_Full);
+    eventPacket.setnodeName(nodeID);
+    eventPacket.setType(ADV);
+    eventPacket.setData(char(eventDat));
+    delay(100); 
   }
   } //!isGate
+  else{
+    char data = gPacket.data(); 
+    char id = gPacket.nodeName(); 
+    if(id<10 && id > 3){
+      Serial.print("From Node: "); 
+      Serial.println(id,HEX); 
+      Serial.print(int(data)); 
+      Serial.println(" degrees temp"); 
+    }
+  }
+} //END LOOP -----------------------------------------------------------------------------------o
+
+
+/*Description of RX_packetWait(int):
+ * Passed the int, limit. These are the state timeouts (ie S1TO) 
+ * Given that it will enter the RX mode and wait for a packet to be received. In the initial
+ * wait for a packet ther is a timer, limiter, counting up to the timeout limit. If the timeout hits
+ * then the function returns false. Otherwise, the state is able to continue to extract the data from 
+ * the RXFIFO - DO NOT CLEAR THE FIFO AT THE END OFF THIS FNC 
+ */ 
+boolean RX_packetWait(int limit){
+  SendStrobe(CC2500_RX); 
+  int limiter = 0; 
+  boolean breakFlag = false; 
+  GDO0_State = digitalRead(GDO0_PIN); 
+  while(!GDO0_State){
+     GDO0_State = digitalRead(GDO0_PIN); 
+     limiter++; 
+     if(limiter>limit){  
+      breakFlag = true; 
+      break;
+     }
+     //delay(10); 
+    }
+  while(GDO0_State && !breakFlag){ //Packet Receive detected, waiting for full packet receive
+    GDO0_State = digitalRead(GDO0_PIN); 
+    delay(10); 
+  }
+  
+  SendStrobe(CC2500_IDLE); 
+  return breakFlag; 
 }
 
 Packet RX(void){
-  
-  char packet; 
-  SendStrobe(CC2500_RX); //RX State enabled on CC2500
-
   int packetLength = ReadReg(CC2500_RXFIFO); 
-  char tempPack[packetLength];
+  char tempPack[pktlen];
   tempPack[0] = packetLength; 
-  for(int itt = 1; itt <= packetLength; itt++){
+  for(int itt = 1; itt <= pktlen; itt++){
     tempPack[itt] = ReadReg(CC2500_RXFIFO); 
   }
   if(packetLength<4){
@@ -231,18 +257,46 @@ Packet RX(void){
   //return tempPack; 
 }
 
+void blinkLED(void){
+  digitalWrite(LED,HIGH); 
+  delay(50);
+  digitalWrite(LED,LOW); 
+  delay(50);
+  digitalWrite(LED,HIGH); 
+  delay(50);
+  digitalWrite(LED,LOW); 
+  delay(50);
+  digitalWrite(LED,HIGH); 
+  delay(50);
+  digitalWrite(LED,LOW); 
+  delay(50);
+  digitalWrite(LED,HIGH); 
+  delay(50);
+  digitalWrite(LED,LOW); 
+  delay(50);
+  
+}
+
 void TX(Packet pk){
-  char packetLen = pk.length(); 
+  SendStrobe(CC2500_IDLE); 
+  //char packetLen = pk.length(); 
+  SendStrobe(CC2500_FTX); 
+  
   char mode = pk.type(); 
   //char txpack[4];
   //txpack = pk.full(); 
   
   WriteReg(CC2500_TXFIFO,pk.length());
+  Serial.println(pk.length(),HEX); 
   WriteReg(CC2500_TXFIFO,pk.nodeName());
+  Serial.println(pk.nodeName(),HEX); 
   WriteReg(CC2500_TXFIFO,pk.type());  
-  if(mode == DAT){
+  Serial.println(pk.type(),HEX); 
+  if(mode == DAT){ 
     WriteReg(CC2500_TXFIFO,pk.data()); 
+    Serial.println(pk.data(),HEX); 
   }
+  Serial.println("----------------------"); 
   /*for(int i = 0; i < packetLen; i++){
     WriteReg(CC2500_TXFIFO,txpack[i]); 
   }
@@ -265,7 +319,13 @@ void TX(Packet pk){
 
 boolean isInteresting(Packet tempPacket){
   //compares if data packet has passed through before and/or if the packet is from this node 
-  return true; //Everything is interesting when you've drunk enough 
+  char inID = tempPacket.nodeName(); 
+  if(inID!=nodeID){
+    return true;  
+  }
+  else{
+    return false; 
+  }
 }
 
 void WriteReg(char addr, char value)
@@ -312,9 +372,27 @@ int readTemp(){ //getting the voltage reading from the temperature sensor
  voltage /= 1024.0; 
  float temperatureC = (voltage - 0.5) * 100 ;  //converting from 10 mv per degree wit 500 mV offset
                                               //to degrees ((voltage - 500mV) times 100)
- return ceil(temperatureC); //Just round up for now 
+ //return ceil(temperatureC); //Just round up for now 
+ return 255; 
 }
 
+long getTimeSeconds(void){
+  /*time_t timer;
+  struct tm y2k = {0};
+  double seconds;
+
+  y2k.tm_hour = 0;   y2k.tm_min = 0; y2k.tm_sec = 0;
+  y2k.tm_year = 100; y2k.tm_mon = 0; y2k.tm_mday = 1;
+
+  time(&timer);  // get current time; same as: timer = time(NULL) 
+
+  seconds = difftime(timer,mktime(&y2k));
+  return seconds; 
+
+  */
+  return(millis());
+  
+}
 void init_CC2500()
 {
   WriteReg(REG_IOCFG2,VAL_IOCFG2);
