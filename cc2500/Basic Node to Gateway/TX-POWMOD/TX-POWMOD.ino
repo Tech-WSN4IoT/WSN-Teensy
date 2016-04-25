@@ -60,8 +60,6 @@ void setup()
   digitalWrite(led,HIGH); 
   init_CC2500();
 
-//  pinMode(13,OUTPUT);
-//  digitalWrite(13,HIGH); 
   
   /* This function is to make sure that cc2500 is successfully configured.
    * This function read values of some registers from CC2500. 
@@ -74,36 +72,12 @@ void setup()
 
 void loop()
 {
-/*    
-    tc_comm = digitalRead(GDO0_PIN);
-    if(tc_comm == false){
-      digitalWrite(led,LOW);
-    }
-    else{
-      digitalWrite(led,HIGH); 
-    }*/
-//    buttonState = digitalRead(buttonPin);
-    //Serial.println(buttonState);
     digitalWrite(led,HIGH); 
-//  To start transmission
- //   digitalWrite(led,HIGH);
-    // read the state of the pushbutton value:
-    // buttonState = digitalRead(buttonPin);
-    Serial.println("Transmission to start");
-    //delay(10);
+
     TxData_RF(No_of_Bytes);    //  Transmit No_of_Bytes-1
-    Serial.println("Transmission is over");
-  //  digitalWrite(led,LOW); 
+
     digitalWrite(led,LOW); 
     delay(100);      
-     /* 
-    while (buttonState)
-      {
-      // read the state of the pushbutton value:
-      buttonState = digitalRead(buttonPin);
-      Serial.println("PB = 1");
-      }
-      */
 }
 
 //  Send slide strobe
@@ -111,48 +85,26 @@ void TxData_RF( unsigned char length)
 {
       // Make sure that the radio is in IDLE state before flushing the FIFO
       SendStrobe(CC2500_IDLE);
-      // Flush TX FIFO
-      //SendStrobe(CC2500_FTX);
-
+      
       // prepare Packet
       unsigned char packet[length];
       // First Byte = Length Of Packet
       packet[0] = length;
       packet[1] = 0x04;
       packet[2] = 0x05;
-      /*
-      for(int i = 1; i < length; i++)
-      {	        	
-          packet[i] = i;
-      }
-      
-      */
-      
-      // SIDLE: exit RX/TX
-      //SendStrobe(CC2500_IDLE);
-      
-      for(int i = 0; i < length; i++)
-      {	  
-          Serial.println("Transmitting ");
-          Serial.println(packet[i],HEX);
+     
+      for(int i = 0; i < length; i++){	  
           WriteReg(CC2500_TXFIFO,packet[i]);
       }
+      
       // STX: enable TX
       SendStrobe(CC2500_TX);
       // Wait for GDO0 to be set -> sync transmitted
-      while (!GDO0_State)
-      {
-          // read the state of the GDO0_PIN value:
+      while (!GDO0_State){
           GDO0_State = digitalRead(GDO0_PIN);
-          //Serial.println("GDO0 = 0");
-       }
-       
-       // Wait for GDO0 to be cleared -> end of packet
-       while (GDO0_State)
-       {
-           // read the state of the GDO0_PIN value:
+      }
+       while (GDO0_State){
            GDO0_State = digitalRead(GDO0_PIN);
-           //Serial.println("GDO0 = 1");
        }
 }// Rf TX Packet 
 	
@@ -248,6 +200,7 @@ void init_CC2500()
   WriteReg(REG_TEST2,VAL_TEST2);
   WriteReg(REG_TEST1,VAL_TEST1);
   WriteReg(REG_TEST0,VAL_TEST0);
+  WriteReg(0x3E,0xFF); 
 /*  
   WriteReg(REG_PARTNUM,VAL_PARTNUM);
   WriteReg(REG_VERSION,VAL_VERSION);
