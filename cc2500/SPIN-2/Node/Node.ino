@@ -1,8 +1,11 @@
 #include <cc2500_REG.h>
 #include <cc2500_VAL.h>
 
-#include <SPI.h>
+//#include "C:\Users\Owner\Documents\GitHub\WSN-Teensy\cc2500\SPIN-2\Node\packet.h"
 #include <packet.h>
+
+#include <time.h> 
+#include <SPI.h>
 
 #define CC2500_IDLE    0x36      // Exit RX / TX, turn
 #define CC2500_TX      0x35      // Enable TX. If in RX state, only enable TX if CCA passes
@@ -12,35 +15,45 @@
 #define CC2500_TXFIFO  0x3F
 #define CC2500_RXFIFO  0x3F
 
-#define ADV 0; //State calls - might or might not be useful for the full Node.m
-#define REQ 1;
-#define DAT 2;
-#define ACK 3; 
+#define ADV 0x00                   //Mode calls - might or might not be useful for the full Node.m
+#define REQ 0x01
+#define DAT 0x02
+#define ACK 0x03
 
-#define Size_of_Meta   0x03      // Standard meta-data packet length 
-#define Size_of_Full   0x04 
+#define Size_of_Meta   3      // Standard meta-data packet length 
+#define Size_of_Full   4 
 
-unsigned char data_buffer[100];  // Node's unique buffer filled with data
+unsigned char data_memory[100];  // Node's memory of data passed through
+int pktlen             = 4;     // Max Packet Length 
+
+// Known structure of Packets:
+// [Length] [LN-ID of Origin Node] [MODE] [DATA]
 
 //------------------------NODE NAME--------------------------------------------
 int nodeID             = 4;      // ID of node 04-"Whiskey", 05-"Vodka", 06-"Lager", 07-"Cider"
 //------------------------DATA SETUP-------------------------------------------
 boolean eventFlag       = false;
 // Reference State Machine Diagram on the Whiteboard in VL E361 As Of 4/23/16 1:00 AM 
-int S2TO                =  1;  // State 2 Iteration Time Out
-int S3TO                =  1;  // State 3 Iteration Time Out
-int S4TO                =  1;  // State 4 Iteration Time Out
+int S1TO                =  100;  // State 1 Iteration Time Out
+int S2TO                =  100;  // State 2 Iteration Time Out
+int S3TO                =  100;  // State 3 Iteration Time Out
+int S4TO                =  100;  // State 4 Iteration Time Out
+// There is an event 5 where it sees if there's any interesting data to flag as an event
+int limiter             =  0;  // General counter used in all state time-outs
+int state               =  1;  // Current state
 int TimeCycle           =  10; // Full Time Cycle of TX and RX in ms
 //-------------------------PIN SETUP-------------------------------------------
 const int sensorPin     = 14;          // Pin of Temperature sensor 
-const int GDO0_PIN      = 2;           // the number of the GDO0_PIN pin
+const int GDO0_PIN      = 16;           // the number of the GDO0_PIN pin
   int GDO0_State        = 0;           // variable for reading the pushbutton status
 const int LED           = 5;           // LED pin 
 const int GATEOUT       = 0;           // Gate set read-out
 const int GATEIN        = 1;           // Gate state read-in
 boolean isGate          = false;       // Gate boolean 
+//--------------------------END SETUP------------------------------------------
 
 void setup(){
+  delay(2000); 
   Serial.begin(9600);
   pinMode(SS,OUTPUT);
   SPI.begin();
@@ -63,57 +76,196 @@ void setup(){
 }
 
 void loop(){
-  //STATE S1
-  Rx(); 
-
-  //STATE S2
-  
-  if(!isGate){ //States S3 and S4 are locked only to nodes. Gates only do states S1 and S2 and report all data through serial through puts. 
-  //STATE S3
-
-  //STATE S4
-
-
-  
-  }
-}
-
-char RX(void){
-  char packet; 
-  SendStrobe(CC2500_RX); //RX State enabled on CC2500
-  while(!GDO_State){
+  Packet gPacket; //General use packet   
+  //STATE S1 - TX: n/a, RX: ADV ---------------------------------------------------------------o S1
+  state = 1; 
+  limiter = 0; 
+  while(!GDO0_State){
      GDO0_State = digitalRead(GDO0_PIN); 
+     limiter++; 
+     if(limiter>S1TO){
+      state = 5;  
+      break;
+     }
      delay(10); 
   }
-  while(GDO_State){
+  while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
     GDO0_State = digitalRead(GDO0_PIN); 
     delay(10); 
   }
+  
+  gPacket = RX(); //updates the global variable pkt[4]; 
+  if(gPacket.type()==ADV){ 
+    //Listening for Advertisement
+    if(isInteresting(gPacket)){
+      state = 2; //Advance to next state knowing we heard a packet that's interesting
+    } 
+  }
+  else{
+    state = 1; //Heard a non-Advertisement, so keep at it. 
+  }
+  
+  //STATE S2 - TX: REQ, RX: DAT---------------------------------------------------------------o S2
+  if(state==2){
+    limiter = 0;  
+     
+    // INSERT CHECK MODE CODE 
+    gPacket.setType(REQ); 
+    TX(gPacket); //TX Req
+
+    while(!GDO0_State){
+     GDO0_State = digitalRead(GDO0_PIN); 
+     limiter++; 
+     if(limiter>S2TO){
+      state = 1;  
+      break;
+     }
+     delay(10); 
+    }
+    while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
+      GDO0_State = digitalRead(GDO0_PIN); 
+      delay(10); 
+    }
+    
+    gPacket = RX(); //updates the global variable pkt[4];  
+    if(gPacket.type()==DAT){
+      gPacket.setType(ACK); 
+      TX(gPacket); 
+      gPacket.setType(ADV); 
+      state = 3; 
+    }
+    else{
+      state = 2; //Try again
+    }
+      
+    }
+   
+  if(!isGate){ //States S3 and S4 are locked only to nodes. Gates only do states S1 and S2 and report all data through serial through puts. 
+  //STATE S3 - TX: ADV, RX: REQ---------------------------------------------------------------o S3
+  if(state==3){
+    limiter = 0; 
+    
+    TX(gPacket); 
+
+    
+    while(!GDO0_State){
+     GDO0_State = digitalRead(GDO0_PIN); 
+     limiter++; 
+     if(limiter>S3TO){
+      state = 1;  
+      break;
+     }
+     delay(10); 
+    }
+    while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
+      GDO0_State = digitalRead(GDO0_PIN); 
+      delay(10); 
+    }
+
+    gPacket = RX(); 
+    if(gPacket.type()==REQ){
+      state = 4; 
+      gPacket.setType(DAT); 
+    }
+    else{
+      state = 1; 
+    }
+    
+  }
+  //STATE S4 - TX: DAT, RX: ACK---------------------------------------------------------------o S4
+  if(state==4){
+    limiter = 0; 
+    TX(gPacket); 
+
+    while(!GDO0_State){
+     GDO0_State = digitalRead(GDO0_PIN); 
+     limiter++; 
+     if(limiter>S4TO){
+      state = 1;  
+      break;
+     }
+     delay(10); 
+    }
+    while(GDO0_State){ //Packet Receive detected, waiting for full packet receive
+      GDO0_State = digitalRead(GDO0_PIN); 
+      delay(10); 
+    }
+
+    gPacket = RX(); 
+    if(gPacket.type()==ACK){
+      state = 1; 
+      gPacket.setType(DAT); 
+    }
+    else{
+      state = 4; //Retry sending Data
+    }
+    
+    
+  }
+  //STATE S5 - EVENT--------------------------------------------------------------------------o S5
+  if(state==5){
+    int eventDat = readTemp(); 
+    state = 3; //Let the world know you have something interesting to say.  
+  }
+  } //!isGate
+}
+
+Packet RX(void){
+  
+  char packet; 
+  SendStrobe(CC2500_RX); //RX State enabled on CC2500
+
   int packetLength = ReadReg(CC2500_RXFIFO); 
   char tempPack[packetLength];
-  tempPack[packetLength] = packetLength; 
+  tempPack[0] = packetLength; 
   for(int itt = 1; itt <= packetLength; itt++){
     tempPack[itt] = ReadReg(CC2500_RXFIFO); 
   }
+  if(packetLength<4){
+    tempPack[3] = 0x00; 
+  }
   SendStrobe(CC2500_IDLE); 
   SendStrobe(CC2500_FRX); 
-  return tempPack; 
+  Packet pk(tempPack[0],tempPack[1],tempPack[2],tempPack[3]); 
+  return pk; 
+  //return tempPack; 
 }
 
-void TX(char tempPack){
+void TX(Packet pk){
+  char packetLen = pk.length(); 
+  char mode = pk.type(); 
+  //char txpack[4];
+  //txpack = pk.full(); 
+  
+  WriteReg(CC2500_TXFIFO,pk.length());
+  WriteReg(CC2500_TXFIFO,pk.nodeName());
+  WriteReg(CC2500_TXFIFO,pk.type());  
+  if(mode == DAT){
+    WriteReg(CC2500_TXFIFO,pk.data()); 
+  }
+  /*for(int i = 0; i < packetLen; i++){
+    WriteReg(CC2500_TXFIFO,txpack[i]); 
+  }
+  */
   SendStrobe(CC2500_TX); 
-  
-
-  
-  
-  
-  
+  while (!GDO0_State)
+      {
+          // read the state of the GDO0_PIN value:
+          GDO0_State = digitalRead(GDO0_PIN);
+       }
+       // Wait for GDO0 to be cleared -> end of packet
+       while (GDO0_State)
+       {
+           // read the state of the GDO0_PIN value:
+           GDO0_State = digitalRead(GDO0_PIN);
+       }
   SendStrobe(CC2500_IDLE);
   SendStrobe(CC2500_FTX);  
 }
 
-boolean isInteresting(char tempPacket){
+boolean isInteresting(Packet tempPacket){
   //compares if data packet has passed through before and/or if the packet is from this node 
+  return true; //Everything is interesting when you've drunk enough 
 }
 
 void WriteReg(char addr, char value)
@@ -363,5 +515,6 @@ void Read_Config_Regs(void)
 /*
  * WREK-Atlanta 91.1 FM
  */
+
 }
 

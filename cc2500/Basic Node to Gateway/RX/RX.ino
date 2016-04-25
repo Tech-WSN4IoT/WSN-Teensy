@@ -18,8 +18,8 @@
 //const int buttonPin = 2;     // the number of the pushbutton pin
 //int buttonState = 0;         // variable for reading the pushbutton status
 
-//const int GDO0_PIN = 16;     // the number of the GDO0_PIN pin
-const int GDO0_PIN = 2; 
+const int GDO0_PIN = 16;     // the number of the GDO0_PIN pin
+//const int GDO0_PIN = 2; 
 int GDO0_State = 0;         // variable for reading the pushbutton status
 const int led = 5; 
 
@@ -33,7 +33,7 @@ void setup()
   //pinMode(buttonPin, INPUT);     
   pinMode(GDO0_PIN, INPUT);     
   delay(500); 
-  Serial.println("Starting...");
+//  Serial.println("Starting...");
   pinMode(led,OUTPUT);
   digitalWrite(led,HIGH); 
   init_CC2500();
@@ -47,7 +47,6 @@ void loop()
 {
   //Read_Config_Regs();
     RxData_RF();
-    Serial.println("Receive Strength:"); 
     //char rssi = ReadReg(CC2500_RSSI); 
     //char * pEnd;
  //   long inPow = strtol(rssi,&pEnd,6); 
@@ -62,11 +61,12 @@ void RxData_RF(void)
     SendStrobe(CC2500_FRX);
    // RX: enable RX
     SendStrobe(CC2500_RX);
+
+    
     
     int PacketLength;
     GDO0_State = digitalRead(GDO0_PIN);
     digitalWrite(led,LOW);
-
     int iterationLimit = 50; 
     int intCt = 0; 
     // Wait for GDO0 to be set -> sync received
@@ -75,6 +75,7 @@ void RxData_RF(void)
     while (!GDO0_State) {
         //Serial.println("GD0 = 0");//
         //Serial.println(ReadReg(CC2500_RXFIFO),HEX); 
+       // Serial.println(ReadReg(REG_RSSI),HEX);
         delay(10); 
         /*
          * 
@@ -136,14 +137,14 @@ void RxData_RF(void)
           
         if(No_of_Bytes == PacketLength)
         {
-          Serial.println("---------------------");
-          Serial.println(PacketLength,HEX);
-          Serial.println(" Packet Received ");
-          data1 = ReadReg(CC2500_RXFIFO); 
-          Serial.println(int(data1)); 
+        //  Serial.println("---------------------");
+        //  Serial.println(PacketLength,HEX);
+        // Serial.println(" Packet Received ");
+        //  data1 = ReadReg(CC2500_RXFIFO); 
+        //  Serial.println(int(data1)); 
           //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
           //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
-          Serial.println(" Degrees Celcius");           
+        //  Serial.println(" Degrees Celcius");           
           // Read data from RX FIFO and store in rxBuffer
           
           //for(int i = 1; i < PacketLength; i++)
@@ -162,6 +163,27 @@ void RxData_RF(void)
             }
             //Serial.println(ReadReg(CC2500_RXFIFO), HEX);
     */      //}
+
+          for(int itt = 1; itt<PacketLength;itt++){
+              Serial.println(ReadReg(CC2500_RXFIFO),HEX); 
+          }
+            char rssi = ReadReg(CC2500_RXFIFO); 
+            char lqi = ReadReg(CC2500_RXFIFO); 
+            int rssi_dbm; 
+            char lqi_2 = lqi & 0x7F; 
+            if (rssi>=128){
+              rssi_dbm = (int) ((int)(rssi - 256) / 2) - (int)69;
+            }
+
+            
+            else{
+              rssi_dbm = (int)(rssi / 2) - (int)69;
+            }
+            Serial.print("RSSI: "); 
+            Serial.println(rssi_dbm); 
+            Serial.print("LQI: "); 
+            Serial.println(lqi_2,HEX); 
+            //Serial.println(,HEX); 
           Serial.println("---------------------");
         }
          
@@ -170,6 +192,20 @@ void RxData_RF(void)
         SendStrobe(CC2500_IDLE);
         // Flush RX FIFO
         SendStrobe(CC2500_FRX);
+
+        /*
+         *       
+      // status[0] = RSSI
+      // status[1] = CRC OK [7], LQI [6:0]
+      num = status[0];
+      if (num >= 128) {
+          rssi_dbm = (int) ((int)(num - 256) / 2) - (int)69;
+      }else {
+          rssi_dbm = (int)(num / 2) - (int)69;
+      }
+      LQI = status[1] & 0x7F;
+      */
+        
 
 }// Rf RxPacket
 
