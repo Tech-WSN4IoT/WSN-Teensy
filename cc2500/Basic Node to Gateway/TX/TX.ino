@@ -165,6 +165,7 @@ void TxData_RF( unsigned char length)
            GDO0_State = digitalRead(GDO0_PIN);
            //Serial.println("GDO0 = 1");
        }
+	   SendStrobe(CC2500_IDLE); 
 }// Rf TX Packet 
 	
 

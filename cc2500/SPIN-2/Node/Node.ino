@@ -1,7 +1,6 @@
 #include <cc2500_REG.h>
 #include <cc2500_VAL.h>
 
-//#include "C:\Users\Owner\Documents\GitHub\WSN-Teensy\cc2500\SPIN-2\Node\packet.h"
 #include <packet.h>
 
 #include <time.h> 
@@ -30,14 +29,16 @@ int pktlen             = 4;     // Max Packet Length
 // [Length] [LN-ID of Origin Node] [MODE] [DATA]
 
 //------------------------NODE NAME--------------------------------------------
-#define nodeID             0x05     // ID of node 04-"Whiskey", 05-"Vodka", 06-"Lager", 07-"Cider"
+#define nodeID             0x01     // ID of node 04-"Whiskey", 05-"Vodka", 06-"Lager", 07-"Cider"
+char acceptableSet[9]     {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}; 
 //------------------------DATA SETUP-------------------------------------------
 boolean eventFlag       = false;
 // Reference State Machine Diagram on the Whiteboard in VL E361 As Of 4/23/16 1:00 AM 
-int S1TO                =  1000;  // State 1 Iteration Time Out
-int S2TO                =  1000;  // State 2 Iteration Time Out
-int S3TO                =  8000;  // State 3 Iteration Time Out
-int S4TO                =  1000;  // State 4 Iteration Time Out
+double S1TO                =  3000;  // State 1 Iteration Time Out in ms
+double S2TO                =  1000;  // State 2 Iteration Time Out in ms
+double S3TO                =  8000;  // State 3 Iteration Time Out in ms
+double S4TO                =  1000;  // State 4 Iteration Time Out in ms
+int rpDAT               =  3;     // How many times do you want to repeat data transmission 
 // There is an event 5 where it sees if there's any interesting data to flag as an event
 int limiter             =  0;  // General counter used in all state time-outs
 int state               =  1;  // Current state
@@ -95,10 +96,8 @@ void setup(){
 void loop(){
   digitalWrite(LED,HIGH); 
   //STATE S1 - TX: n/a, RX: ADV ---------------------------------------------------------------o S1
-
   if(state == 1){
    //Serial.println("STATE 1");
-   
     sinceTime = getTimeSeconds();  
     if(!isGate && sinceTime > (startTime + delayEvent)){
       startTime = sinceTime;
@@ -124,8 +123,7 @@ void loop(){
   }
   //STATE S2 - TX: REQ, RX: DAT---------------------------------------------------------------o S2
   if(state==2){
-   // Serial.println("STATE 2"); 
-
+    //Serial.println("STATE 2"); 
     gPacket.setType(REQ); 
     gPacket.setLen(3); 
     TX(gPacket); //TX Req
@@ -151,41 +149,48 @@ void loop(){
   //STATE S3 - TX: ADV, RX: REQ---------------------------------------------------------------o S3
   if(state==3){
   //Serial.println("STATE 3"); 
-    
     TX(eventPacket); 
     breakFlag = RX_packetWait(S3TO); 
     if(!breakFlag){
-      gPacket = RX(); 
+      gPacket = RX(); //for REQ
       if(gPacket.type()==REQ){
         state = 4; 
         gPacket.setType(DAT); 
       }
       else{
-        state = 1; 
+        state = 3; 
       }
     }
   }
   //STATE S4 - TX: DAT, RX: ACK---------------------------------------------------------------o S4
   if(state==4){
-    // Serial.println("STATE 4"); 
-    
-    TX(eventPacket); 
-    blinkLED();
-    breakFlag = RX_packetWait(S4TO); 
-    if(!breakFlag){
-      gPacket = RX(); 
-      if(gPacket.type()==ACK){
-        state = 1;  
+    //Serial.println("STATE 4"); 
+    int datcnt = 0; 
+    while(true){
+      TX(eventPacket); 
+      blinkLED();
+      breakFlag = RX_packetWait(S4TO); 
+      if(!breakFlag){
+        gPacket = RX(); //For ACK
+        if(gPacket.type()==ACK){
+          state = 1;  
+          datcnt = rpDAT; 
+        }
+        else{
+          state = 4; //Retry sending Data
+        }
       }
-      else{
-        state = 4; //Retry sending Data
+      datcnt++; 
+      if(datcnt>rpDAT){
+        state = 1; 
+        break; 
       }
     }
     
   }
   //STATE S5 - EVENT--------------------------------------------------------------------------o S5
   if(state==5){
-     //Serial.println("STATE 5"); 
+    // Serial.println("STATE 5"); 
      digitalWrite(LED,LOW); 
     int eventDat = readTemp(); 
     state = 3; //Let the world know you have something interesting to say.  
@@ -197,14 +202,17 @@ void loop(){
     delay(100); 
   }
   } //!isGate
+  //---------------------------------GATEWAY OUTPUT -------------------------------------------o
   else{
-    char data = gPacket.data(); 
-    char id = gPacket.nodeName(); 
-    if(id<10 && id > 3){
+    char data = eventPacket.data(); 
+    char id = eventPacket.nodeName(); 
+    if(isInteresting(eventPacket)){
+      Serial.println("GATEWAY RECEIVE-----------------------");
       Serial.print("From Node: "); 
       Serial.println(id,HEX); 
       Serial.print(int(data)); 
       Serial.println(" degrees temp"); 
+      Serial.println("--------------------------------------"); 
     }
   }
 } //END LOOP -----------------------------------------------------------------------------------o
@@ -217,19 +225,23 @@ void loop(){
  * then the function returns false. Otherwise, the state is able to continue to extract the data from 
  * the RXFIFO - DO NOT CLEAR THE FIFO AT THE END OFF THIS FNC 
  */ 
-boolean RX_packetWait(int limit){
+boolean RX_packetWait(double limit){
   SendStrobe(CC2500_RX); 
-  int limiter = 0; 
+  double startTime = getTimeSeconds(); 
+  double breakTime = startTime + limit; 
+  double iterTime = 0; 
+  
   boolean breakFlag = false; 
   GDO0_State = digitalRead(GDO0_PIN); 
   while(!GDO0_State){
      GDO0_State = digitalRead(GDO0_PIN); 
-     limiter++; 
-     if(limiter>limit){  
+     iterTime = getTimeSeconds()-startTime;
+     if((startTime + iterTime)>breakTime){  
       breakFlag = true; 
+      Serial.println("Break flag"); 
       break;
      }
-     //delay(10); 
+     delay(10); 
     }
   while(GDO0_State && !breakFlag){ //Packet Receive detected, waiting for full packet receive
     GDO0_State = digitalRead(GDO0_PIN); 
@@ -241,13 +253,14 @@ boolean RX_packetWait(int limit){
 }
 
 Packet RX(void){
-  int packetLength = ReadReg(CC2500_RXFIFO); 
+  SendStrobe(CC2500_RX); 
+  char packetLength = ReadReg(CC2500_RXFIFO); 
   char tempPack[pktlen];
   tempPack[0] = packetLength; 
   for(int itt = 1; itt <= pktlen; itt++){
     tempPack[itt] = ReadReg(CC2500_RXFIFO); 
   }
-  if(packetLength<4){
+  if(packetLength<0x04){
     tempPack[3] = 0x00; 
   }
   SendStrobe(CC2500_IDLE); 
@@ -287,16 +300,21 @@ void TX(Packet pk){
   //txpack = pk.full(); 
   
   WriteReg(CC2500_TXFIFO,pk.length());
-  Serial.println(pk.length(),HEX); 
   WriteReg(CC2500_TXFIFO,pk.nodeName());
-  Serial.println(pk.nodeName(),HEX); 
   WriteReg(CC2500_TXFIFO,pk.type());  
-  Serial.println(pk.type(),HEX); 
   if(mode == DAT){ 
-    WriteReg(CC2500_TXFIFO,pk.data()); 
-    Serial.println(pk.data(),HEX); 
+    WriteReg(CC2500_TXFIFO,pk.data());   
+  }
+  
+  Serial.println("TX:-------------------"); 
+  Serial.println(pk.length(),HEX);
+  Serial.println(pk.nodeName(),HEX);  
+  Serial.println(pk.type(),HEX); 
+  if(mode ==DAT){
+    Serial.println(pk.data(),HEX);
   }
   Serial.println("----------------------"); 
+  
   /*for(int i = 0; i < packetLen; i++){
     WriteReg(CC2500_TXFIFO,txpack[i]); 
   }
@@ -305,7 +323,7 @@ void TX(Packet pk){
   while (!GDO0_State)
       {
           // read the state of the GDO0_PIN value:
-          GDO0_State = digitalRead(GDO0_PIN);
+          GDO0_State = digitalRead(GDO0_PIN); 
        }
        // Wait for GDO0 to be cleared -> end of packet
        while (GDO0_State)
@@ -314,13 +332,14 @@ void TX(Packet pk){
            GDO0_State = digitalRead(GDO0_PIN);
        }
   SendStrobe(CC2500_IDLE);
-  SendStrobe(CC2500_FTX);  
 }
 
 boolean isInteresting(Packet tempPacket){
   //compares if data packet has passed through before and/or if the packet is from this node 
   char inID = tempPacket.nodeName(); 
-  if(inID!=nodeID){
+  //Serial.print("Incoming... "); 
+  //Serial.println(inID,HEX); 
+  if(inID!=nodeID && validLNID(inID)){
     return true;  
   }
   else{
@@ -328,6 +347,17 @@ boolean isInteresting(Packet tempPacket){
   }
 }
 
+/* validLNID:
+ * Valid Local-Network ID, checks if the ID of the packet matches any of the known set of acceptableSet
+ */ 
+boolean validLNID(char id){ 
+  for(int itt=0; itt < sizeof(acceptableSet); itt++){
+    if(acceptableSet[itt] == id){
+      return true; 
+    }
+  }
+  return false; 
+}
 void WriteReg(char addr, char value)
 {
   digitalWrite(SS,LOW);
