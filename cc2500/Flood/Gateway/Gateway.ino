@@ -15,132 +15,83 @@
 
 #define No_of_Bytes    3
 
-//const int buttonPin = 2;     // the number of the pushbutton pin
-//int buttonState = 0;         // variable for reading the pushbutton status
-
 const int GDO0_PIN = 16;     // the number of the GDO0_PIN pin
-//const int GDO0_PIN = 2; 
-int GDO0_State = 0;         // variable for reading the pushbutton status
-const int led = 5; 
+  int GDO0_State = 0;         // variable for reading the pushbutton status
+const int sendled = 5; 
+const int receiveled = 6;
+
+const char acceptableSet[9] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09};
+
+char packet[No_of_Bytes]; 
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
   pinMode(SS,OUTPUT);
   SPI.begin();
   digitalWrite(SS,HIGH);
   // initialize the pushbutton pin as an input:
   //pinMode(buttonPin, INPUT);     
   pinMode(GDO0_PIN, INPUT);     
-  delay(500); 
-//  Serial.println("Starting...");
-  pinMode(led,OUTPUT);
-  digitalWrite(led,HIGH); 
+  pinMode(sendled,OUTPUT);
+  pinMode(receiveled,OUTPUT);
+  digitalWrite(sendled,LOW); 
+  digitalWrite(receiveled,LOW); 
   init_CC2500();
-  
-  Read_Config_Regs();
 }
 
 void loop()
-{
-  //Read_Config_Regs();
-    RxData_RF();
-    //char rssi = ReadReg(CC2500_RSSI); 
-    //char * pEnd;
- //   long inPow = strtol(rssi,&pEnd,6); 
- //   Serial.println(inPow); 
-}
+{  // RX: enable RX
+    SendStrobe(CC2500_RX);
+    
+    GDO0_State = digitalRead(GDO0_PIN);
+    // Wait for GDO0 to be set -> sync received
+    while (!GDO0_State) {
+        GDO0_State = digitalRead(GDO0_PIN); // read the state of the GDO0_PIN value
+        delay(5);
+    }
+    while (GDO0_State)  {
+      digitalWrite(receiveled,HIGH); 
+      GDO0_State = digitalRead(GDO0_PIN);
+      delay(5);      
+    }
+    digitalWrite(receiveled, LOW);
+    packet[0] = ReadReg(CC2500_RXFIFO); 
+    packet[1] = ReadReg(CC2500_RXFIFO);  
+    packet[2] = ReadReg(CC2500_RXFIFO);  
 
-
-void RxData_RF(void) 
-{
+    
+    if(sanityCheck(packet[1], packet[2])){
+      Serial.println("==========================="); 
+      //Serial.println(packet[0],HEX);    
+      Serial.println(packet[1],HEX); 
+      Serial.println(int(packet[2])); 
+    }
+    
+    // Make sure that the radio is in IDLE state before flushing the FIFO
+    // (Unless RXOFF_MODE has been changed, the radio should be in IDLE state at this point) 
     SendStrobe(CC2500_IDLE);
     // Flush RX FIFO
     SendStrobe(CC2500_FRX);
-   // RX: enable RX
-    SendStrobe(CC2500_RX);
+}
 
-    
-    
-    int PacketLength;
-    GDO0_State = digitalRead(GDO0_PIN);
-    digitalWrite(led,LOW);
-    // Wait for GDO0 to be set -> sync received
-    char outF; 
-    digitalWrite(led,HIGH); 
-    while (!GDO0_State) {
-        delay(10); 
-        GDO0_State = digitalRead(GDO0_PIN); // read the state of the GDO0_PIN value
+boolean sanityCheck(char id, char data){
+  if(!inSet(id) || data>50){
+    return false;
+  }
+  else{
+    return true; 
+  }
+}
+
+boolean inSet(char id){
+  for(int itt=0; itt < sizeof(acceptableSet); itt++){
+    if(id == acceptableSet[itt]){
+      return true;
     }
-    // Wait for GDO0 to be cleared -> end of packet
-    digitalWrite(led,LOW); 
-    while (GDO0_State)
-    {
-      // read the state of the GDO0_PIN value:
-      GDO0_State = digitalRead(GDO0_PIN);
-        //Serial.println("GD0 = 1");
-      delay(10);
-    }
-    
-    char data1, data2;
-  // Read length byte
-        PacketLength = ReadReg(CC2500_RXFIFO);
-        
-        //  Serial.println("---------------------");
-        //  Serial.println(PacketLength,HEX);
-        // Serial.println(" Packet Received ");
-        //  data1 = ReadReg(CC2500_RXFIFO); 
-        //  Serial.println(int(data1)); 
-          //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
-          //Serial.print(ReadReg(CC2500_RXFIFO),HEX); 
-        //  Serial.println(" Degrees Celcius");           
-          // Read data from RX FIFO and store in rxBuffer
-          
-          Serial.println(PacketLength,HEX); 
-          for(int itt = 1; itt<3;itt++){
-              Serial.println(ReadReg(CC2500_RXFIFO),HEX); 
-          }
-            char rssi = ReadReg(CC2500_RXFIFO); 
-            char lqi = ReadReg(CC2500_RXFIFO); 
-            int rssi_dbm; 
-            char lqi_2 = lqi & 0x7F; 
-            
-            if (rssi>=128){
-              rssi_dbm = (int) ((int)(rssi - 256) / 2) - (int)69;
-            }
-            else{
-              rssi_dbm = (int)(rssi / 2) - (int)69;
-            }
-            
-            /*Serial.print("RSSI: "); 
-            Serial.println(rssi_dbm); 
-            Serial.print("LQI: "); 
-            Serial.println(lqi_2,HEX); 
-            */ 
-          Serial.println("---------------------");
-       
-        // Make sure that the radio is in IDLE state before flushing the FIFO
-        // (Unless RXOFF_MODE has been changed, the radio should be in IDLE state at this point) 
-        SendStrobe(CC2500_IDLE);
-        // Flush RX FIFO
-        SendStrobe(CC2500_FRX);
-
-        /*
-         *       
-      // status[0] = RSSI
-      // status[1] = CRC OK [7], LQI [6:0]
-      num = status[0];
-      if (num >= 128) {
-          rssi_dbm = (int) ((int)(num - 256) / 2) - (int)69;
-      }else {
-          rssi_dbm = (int)(num / 2) - (int)69;
-      }
-      LQI = status[1] & 0x7F;
-      */
-        
-
-}// Rf RxPacket
-
+  }
+  return false;
+}
 
 void WriteReg(char addr, char value)
 {
@@ -161,7 +112,7 @@ char ReadReg(char addr)
   digitalWrite(SS,LOW);
   while (digitalRead(MISO) == HIGH) {
     };
-  char x = SPI.transfer(addr);
+  SPI.transfer(addr);
   delay(10);
   char y = SPI.transfer(0);
   digitalWrite(SS,HIGH);
@@ -233,6 +184,7 @@ void init_CC2500()
   WriteReg(REG_TEST2,VAL_TEST2);
   WriteReg(REG_TEST1,VAL_TEST1);
   WriteReg(REG_TEST0,VAL_TEST0);
+  WriteReg(0x3E,0x60); // DECREASING TX POWER TO -29.5 dBm
 /*  
   WriteReg(REG_PARTNUM,VAL_PARTNUM);
   WriteReg(REG_VERSION,VAL_VERSION);
@@ -349,7 +301,7 @@ void Read_Config_Regs(void)
    delay(10);
   Serial.println(ReadReg(REG_TEST0),HEX);
    delay(10);
- /*
+
   Serial.println(ReadReg(REG_PARTNUM),HEX);
    delay(1000);
   Serial.println(ReadReg(REG_VERSION),HEX);
